@@ -321,3 +321,145 @@ export default function MissionControl() {
     </div>
   );
 }
+
+  // Fetch tasks
+  const [tasks, setTasks] = useState<any>(null);
+  const [tasksLoading, setTasksLoading] = useState(false);
+
+  useEffect(() => {
+    const fetchTasks = async () => {
+      try {
+        setTasksLoading(true);
+        const res = await fetch('/api/tasks');
+        const data = await res.json();
+        setTasks(data);
+      } catch (e) {
+        console.error('Failed to fetch tasks');
+      } finally {
+        setTasksLoading(false);
+      }
+    };
+
+    fetchTasks();
+  }, []);
+
+  // Kanban column rendering
+  const renderKanbanColumn = (title: string, tasksList: string[], color: string) => (
+    <div className={`${color} rounded-lg p-3 min-h-[200px]`}>
+      <div className="flex items-center gap-2 mb-3">
+        <div className="w-2 h-2 rounded-full bg-white/50" />
+        <span className="font-bold text-sm">{title}</span>
+        <span className="text-xs text-white/70 ml-auto">{tasksList.length}</span>
+      </div>
+      <div className="space-y-2">
+        {tasksList.map((task, i) => (
+          <div key={i} className="bg-white/10 rounded p-2 text-xs text-white/90">
+            {task}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="min-h-screen bg-gray-900 text-white flex">
+      {/* LEFT PANEL */}
+      {showLeftPanel && (
+        <div className="w-80 bg-gray-800 border-r border-gray-700 flex flex-col flex-shrink-0">
+          {/* Tab Buttons */}
+          <div className="flex border-b border-gray-700">
+            <button onClick={() => setActiveLeftTab('logs')} className={`flex-1 p-3 flex items-center justify-center gap-2 ${activeLeftTab === 'logs' ? 'bg-gray-700' : 'text-gray-400'}`}>
+              <Terminal size={18} /> <span className="text-sm">Logs</span>
+            </button>
+            <button onClick={() => setActiveLeftTab('settings')} className={`flex-1 p-3 flex items-center justify-center gap-2 ${activeLeftTab === 'settings' ? 'bg-blue-600' : 'text-gray-400'}`}>
+              <Settings size={18} /> <span className="text-sm">Settings</span>
+            </button>
+            <button onClick={() => setActiveLeftTab('notes')} className={`flex-1 p-3 flex items-center justify-center gap-2 ${activeLeftTab === 'notes' ? 'bg-yellow-600' : 'text-gray-400'}`}>
+              <StickyNote size={18} /> <span className="text-sm">Notes</span>
+            </button>
+            <button onClick={() => setActiveLeftTab('tasks')} className={`flex-1 p-3 flex items-center justify-center gap-2 ${activeLeftTab === 'tasks' ? 'bg-purple-600' : 'text-gray-400'}`}>
+              <CheckSquare size={18} /> <span className="text-sm">Tasks</span>
+            </button>
+          </div>
+
+          {/* Tab Content */}
+          <div className="flex-1 overflow-y-auto">
+            {activeLeftTab === 'logs' && (
+              <div className="p-3 font-mono text-xs space-y-1">
+                <div className="text-gray-400 mb-2">Ollama Models</div>
+                {ollamaModels.map((model, i) => (
+                  <div key={i} className="flex gap-2 items-center">
+                    <span className={model.active ? 'text-green-400' : 'text-gray-500'}>{model.active ? '●' : '○'}</span>
+                    <span className="text-gray-300">{model.name}</span>
+                    <span className="text-gray-500 ml-auto">{model.size}</span>
+                  </div>
+                ))}
+                {ollamaModels.length === 0 && (
+                  <div className="text-gray-500">No models loaded</div>
+                )}
+              </div>
+            )}
+
+            {activeLeftTab === 'settings' && (
+              <div className="p-4 space-y-6">
+                <div className="space-y-3">
+                  <label className="block text-sm font-medium text-gray-300">Refresh Interval</label>
+                  <div className="flex items-center gap-2">
+                    <button onClick={() => setRefreshInterval(Math.max(5, refreshInterval - 5))} className="p-2 bg-gray-700 hover:bg-gray-600 rounded text-xl">-</button>
+                    <div className="flex-1 bg-gray-900 rounded px-3 py-2 text-center font-mono">{refreshInterval}s</div>
+                    <button onClick={() => setRefreshInterval(Math.min(300, refreshInterval + 5))} className="p-2 bg-gray-700 hover:bg-gray-600 rounded text-xl">+</button>
+                  </div>
+                </div>
+                <div className="grid grid-cols-3 gap-2">
+                  {[10, 30, 60].map(p => (
+                    <button key={p} onClick={() => setRefreshInterval(p)} className={`px-2 py-1.5 rounded text-xs ${refreshInterval === p ? 'bg-blue-600' : 'bg-gray-700'}`}>{p}s</button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {activeLeftTab === 'notes' && (
+              <div className="flex flex-col h-full">
+                <div className="p-3 border-b border-gray-700">
+                  <div className="flex gap-2">
+                    <input value={newNote} onChange={(e) => setNewNote(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && addNote()} placeholder="Add note..." className="flex-1 px-2 py-1.5 bg-gray-700 rounded text-xs" />
+                    <button onClick={addNote} className="px-2 py-1.5 bg-yellow-600 hover:bg-yellow-700 rounded text-xs"><Plus size={14} /></button>
+                  </div>
+                </div>
+                <div className="flex-1 overflow-y-auto p-3 space-y-2">
+                  {stickyNotes.map(note => (
+                    <div key={note.id} className="bg-yellow-50 border border-yellow-300 rounded p-2 text-xs text-gray-700 group">
+                      <div className="flex justify-between">
+                        {isUrl(note.content) ? <a href={note.content} target="_blank" className="text-blue-600 underline break-all">{note.content}</a> : <span>{note.content}</span>}
+                        <button onClick={() => deleteNote(note.id)} className="opacity-0 group-hover:opacity-100 text-red-500"><Trash2 size={12} /></button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {activeLeftTab === 'tasks' && (
+              <div className="p-4">
+                <div className="text-sm text-gray-400 mb-4">Project Tasks</div>
+                {tasksLoading ? (
+                  <div className="text-gray-500 text-center py-8">Loading...</div>
+                ) : tasks ? (
+                  <div className="space-y-4">
+                    {renderKanbanColumn('Backlog', tasks.backlog || [], 'bg-gray-700')}
+                    {renderKanbanColumn('In Progress', tasks.inProgress || [], 'bg-blue-600')}
+                    {renderKanbanColumn('Done', tasks.done || [], 'bg-green-600')}
+                  </div>
+                ) : (
+                  <div className="text-gray-500 text-center py-8">No tasks loaded</div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* COLLAPSE BUTTON */}
+      <button onClick={() => setShowLeftPanel(!showLeftPanel)} className="absolute top-1/2 z-10 bg-gray-800 p-1 rounded-r border border-gray-700" style={{ left: showLeftPanel ? '320px' : '0' }}>
+        {showLeftPanel ? <ChevronLeft size={16} /> : <ChevronRight size={16} />}
+      </button>
