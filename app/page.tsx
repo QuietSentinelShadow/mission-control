@@ -4,26 +4,27 @@ import { useState, useEffect } from 'react';
 import { 
   Activity, Server, Brain, Wifi, ChevronLeft, ChevronRight, 
   Settings, Terminal, StickyNote, Plus, Trash2, Cpu, Clock,
-  AlertTriangle, Zap
+  AlertTriangle, Zap, Box
 } from 'lucide-react';
 
 // Types
-interface LMRequest {
+interface OllamaModel {
   id: string;
-  timestamp: string;
-  model: string;
-  promptTokens: number;
-  completionTokens: number;
-  responseTime: number;
-  status: 'success' | 'error';
+  name: string;
+  size: string;
+  params: string;
+  quant: string;
+  active: boolean;
 }
 
-interface LMStats {
+interface OllamaStats {
+  status: 'online' | 'offline';
+  totalModels: number;
+  activeModel: string;
+  vramUsage: string;
+  contextLength: string;
   queueDepth: number;
-  avgResponseTime: number;
-  totalRequests: number;
-  alertActive: boolean;
-  throttleActive: boolean;
+  apiEndpoint: string;
 }
 
 interface SystemStatus {
@@ -41,14 +42,16 @@ export default function MissionControl() {
   const [showLogPanel, setShowLogPanel] = useState(true);
   const [refreshInterval, setRefreshInterval] = useState(30);
   
-  // LM Studio state
-  const [lmRequests, setLmRequests] = useState<LMRequest[]>([]);
-  const [lmStats, setLmStats] = useState<LMStats>({
+  // Ollama state
+  const [ollamaModels, setOllamaModels] = useState<OllamaModel[]>([]);
+  const [ollamaStats, setOllamaStats] = useState<OllamaStats>({
+    status: 'offline',
+    totalModels: 0,
+    activeModel: 'None',
+    vramUsage: '0 GB',
+    contextLength: 'N/A',
     queueDepth: 0,
-    avgResponseTime: 0,
-    totalRequests: 0,
-    alertActive: false,
-    throttleActive: false
+    apiEndpoint: 'http://127.0.0.1:11434'
   });
   
   // Sticky notes
@@ -62,7 +65,7 @@ export default function MissionControl() {
     { name: 'EyeZen', status: 'online', icon: Server, metrics: [{ label: 'Status', value: 'Running' }, { label: 'Port', value: '3000' }] },
     { name: 'EyeZen Prod', status: 'online', icon: Server, metrics: [{ label: 'Status', value: 'Deployed' }, { label: 'URL', value: 'Vercel' }] },
     { name: 'amtoc01bot', status: 'online', icon: Brain, metrics: [{ label: 'Model', value: 'zai/glm-5' }, { label: 'Status', value: 'Active' }] },
-    { name: 'LM Studio', status: 'online', icon: Cpu, metrics: [{ label: 'Model', value: 'qwen3.5-35b' }, { label: 'Port', value: '1234' }] },
+    { name: 'Ollama', status: ollamaStats.status, icon: Box, metrics: [{ label: 'Model', value: ollamaStats.activeModel }, { label: 'VRAM', value: ollamaStats.vramUsage }] },
     { name: 'GitHub', status: 'online', icon: Server, metrics: [{ label: 'Repos', value: '2 active' }, { label: 'Org', value: 'QuietSentinelShadow' }] },
     { name: 'Cron Jobs', status: 'online', icon: Clock, metrics: [{ label: 'Active', value: '4 jobs' }, { label: 'Next', value: '7:00 AM' }] },
   ];
@@ -79,16 +82,16 @@ export default function MissionControl() {
     return () => clearInterval(timer);
   }, []);
 
-  // Fetch LM Studio stats
+  // Fetch Ollama stats
   useEffect(() => {
     const fetchStats = async () => {
       try {
-        const res = await fetch('/api/lm-studio/stats');
+        const res = await fetch('/api/ollama/stats');
         const data = await res.json();
-        setLmStats(data.stats);
-        setLmRequests(data.requests);
+        setOllamaStats(data.stats);
+        setOllamaModels(data.models);
       } catch (e) {
-        console.error('Failed to fetch LM stats');
+        console.error('Failed to fetch Ollama stats');
       }
     };
 
@@ -136,14 +139,17 @@ export default function MissionControl() {
           <div className="flex-1 overflow-y-auto">
             {activeLeftTab === 'logs' && (
               <div className="p-3 font-mono text-xs space-y-1">
-                <div className="text-gray-400 mb-2">OpenClaw Logs</div>
-                {lmRequests.slice(0, 20).map((req, i) => (
-                  <div key={i} className="flex gap-2">
-                    <span className="text-gray-500">[{req.timestamp.split('T')[1]?.slice(0, 8)}]</span>
-                    <span className={req.status === 'success' ? 'text-green-400' : 'text-red-400'}>[{req.status}]</span>
-                    <span className="text-gray-300">{req.model}</span>
+                <div className="text-gray-400 mb-2">Ollama Models</div>
+                {ollamaModels.map((model, i) => (
+                  <div key={i} className="flex gap-2 items-center">
+                    <span className={model.active ? 'text-green-400' : 'text-gray-500'}>{model.active ? '●' : '○'}</span>
+                    <span className="text-gray-300">{model.name}</span>
+                    <span className="text-gray-500 ml-auto">{model.size}</span>
                   </div>
                 ))}
+                {ollamaModels.length === 0 && (
+                  <div className="text-gray-500">No models loaded</div>
+                )}
               </div>
             )}
 
@@ -224,39 +230,42 @@ export default function MissionControl() {
           </div>
         </div>
 
-        {/* LM Studio Panel */}
+        {/* Ollama Panel */}
         <div className="bg-gray-800 rounded-lg p-4 mb-6 border border-gray-700">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-bold flex items-center gap-2">
-              <Cpu className="text-blue-400" /> LM Studio Queue Monitor
+              <Box className="text-blue-400" /> Ollama Status
             </h2>
-            <div className="flex gap-2">
-              {lmStats.alertActive && <span className="px-2 py-1 bg-yellow-600 rounded text-xs">⚠️ ALERT</span>}
-              {lmStats.throttleActive && <span className="px-2 py-1 bg-red-600 rounded text-xs">🛑 THROTTLED</span>}
+            <div className={`px-3 py-1 rounded text-xs font-bold ${ollamaStats.status === 'online' ? 'bg-green-600' : 'bg-red-600'}`}>
+              {ollamaStats.status.toUpperCase()}
             </div>
           </div>
           
-          <div className="grid grid-cols-4 gap-4 mb-4">
+          <div className="grid grid-cols-5 gap-4 mb-4">
             <div className="bg-gray-900 rounded p-3">
-              <div className="text-xs text-gray-400">Queue Depth</div>
-              <div className="text-2xl font-bold">{lmStats.queueDepth}</div>
+              <div className="text-xs text-gray-400">Active Model</div>
+              <div className="text-lg font-bold truncate" title={ollamaStats.activeModel}>{ollamaStats.activeModel || 'None'}</div>
             </div>
             <div className="bg-gray-900 rounded p-3">
-              <div className="text-xs text-gray-400">Avg Response</div>
-              <div className="text-2xl font-bold">{lmStats.avgResponseTime.toFixed(1)}s</div>
+              <div className="text-xs text-gray-400">VRAM</div>
+              <div className="text-lg font-bold">{ollamaStats.vramUsage}</div>
             </div>
             <div className="bg-gray-900 rounded p-3">
-              <div className="text-xs text-gray-400">Total Requests</div>
-              <div className="text-2xl font-bold">{lmStats.totalRequests}</div>
+              <div className="text-xs text-gray-400">Context</div>
+              <div className="text-lg font-bold">{ollamaStats.contextLength}</div>
             </div>
             <div className="bg-gray-900 rounded p-3">
-              <div className="text-xs text-gray-400">Status</div>
-              <div className="text-2xl font-bold text-green-400">OK</div>
+              <div className="text-xs text-gray-400">Models</div>
+              <div className="text-lg font-bold">{ollamaStats.totalModels}</div>
+            </div>
+            <div className="bg-gray-900 rounded p-3">
+              <div className="text-xs text-gray-400">API</div>
+              <div className="text-sm font-mono text-gray-400">:11434</div>
             </div>
           </div>
 
           <div className="text-xs text-gray-500">
-            Thresholds: Alert @ depth &gt; 10 or response &gt; 3s | Throttle @ depth &gt; 20 or response &gt; 5s
+            Endpoint: {ollamaStats.apiEndpoint} | Refresh: {refreshInterval}s
           </div>
         </div>
 
@@ -282,24 +291,30 @@ export default function MissionControl() {
         </div>
       </div>
 
-      {/* RIGHT PANEL - Detailed Logs */}
+      {/* RIGHT PANEL - Model Details */}
       {showLogPanel && (
         <div className="fixed right-0 top-0 h-full w-80 bg-gray-950 border-l border-gray-700 flex flex-col">
           <div className="flex items-center justify-between p-3 border-b border-gray-700">
-            <span className="font-bold text-sm">LM Studio Requests</span>
+            <span className="font-bold text-sm">Ollama Models</span>
             <button onClick={() => setShowLogPanel(false)} className="text-gray-400 hover:text-white">✕</button>
           </div>
           <div className="flex-1 overflow-y-auto p-3 font-mono text-xs space-y-2">
-            {lmRequests.slice(0, 50).map((req, i) => (
-              <div key={i} className="bg-gray-900 rounded p-2">
-                <div className="flex justify-between text-gray-400">
-                  <span>{req.timestamp.split('T')[1]?.slice(0, 8)}</span>
-                  <span className={req.status === 'success' ? 'text-green-400' : 'text-red-400'}>{req.status}</span>
+            {ollamaModels.map((model, i) => (
+              <div key={i} className={`rounded p-3 ${model.active ? 'bg-green-900/30 border border-green-700' : 'bg-gray-900'}`}>
+                <div className="flex justify-between items-center mb-1">
+                  <span className="font-bold text-gray-200">{model.name}</span>
+                  {model.active && <span className="text-green-400 text-xs">● ACTIVE</span>}
                 </div>
-                <div className="text-gray-300 truncate">{req.model}</div>
-                <div className="text-gray-500">{req.promptTokens}→{req.completionTokens} tokens | {req.responseTime.toFixed(2)}s</div>
+                <div className="grid grid-cols-2 gap-1 text-gray-400">
+                  <div>Size: <span className="text-gray-300">{model.size}</span></div>
+                  <div>Params: <span className="text-gray-300">{model.params}</span></div>
+                  <div>Quant: <span className="text-gray-300">{model.quant}</span></div>
+                </div>
               </div>
             ))}
+            {ollamaModels.length === 0 && (
+              <div className="text-gray-500 text-center py-8">No models available</div>
+            )}
           </div>
         </div>
       )}
