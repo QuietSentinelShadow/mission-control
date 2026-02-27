@@ -34,7 +34,8 @@ interface SystemStatus {
 }
 
 export default function MissionControl() {
-  const [currentTime, setCurrentTime] = useState(new Date());
+  const [currentTime, setCurrentTime] = useState<Date | null>(null);
+  const [mounted, setMounted] = useState(false);
   const [showLeftPanel, setShowLeftPanel] = useState(true);
   const [activeLeftTab, setActiveLeftTab] = useState<'settings' | 'notes' | 'logs'>('logs');
   const [showLogPanel, setShowLogPanel] = useState(true);
@@ -65,6 +66,12 @@ export default function MissionControl() {
     { name: 'GitHub', status: 'online', icon: Server, metrics: [{ label: 'Repos', value: '2 active' }, { label: 'Org', value: 'QuietSentinelShadow' }] },
     { name: 'Cron Jobs', status: 'online', icon: Clock, metrics: [{ label: 'Active', value: '4 jobs' }, { label: 'Next', value: '7:00 AM' }] },
   ];
+
+  // Set mounted and initial time
+  useEffect(() => {
+    setMounted(true);
+    setCurrentTime(new Date());
+  }, []);
 
   // Update time every second
   useEffect(() => {
@@ -203,8 +210,8 @@ export default function MissionControl() {
                 <Terminal size={18} />
               </button>
               <div className="text-right">
-                <div className="text-xl font-mono">{currentTime.toLocaleTimeString()}</div>
-                <div className="text-xs text-gray-400">{currentTime.toLocaleDateString()}</div>
+                <div className="text-xl font-mono">{currentTime?.toLocaleTimeString() || '...'}</div>
+                <div className="text-xs text-gray-400">{currentTime?.toLocaleDateString() || '...'}</div>
               </div>
             </div>
           </div>
