@@ -93,7 +93,8 @@ export default function MissionControl() {
   const getBotStatus = (name: string): 'online' | 'offline' => {
     const bot = botStatuses.find(b => b.name === name)
     if (!bot) return 'online'
-    return bot.isStale ? 'offline' : bot.status
+    if (bot.isStale) return 'offline'
+    return bot.status === 'busy' ? 'online' : bot.status
   }
   
   const getBotMetric = (name: string, key: string): string => {
