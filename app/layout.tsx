@@ -2,8 +2,12 @@ import type { Metadata } from 'next'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'Mission Control - AMTOC01BOT',
+  title: 'Mission Control - AMTOC',
   description: 'System monitoring dashboard',
+  robots: {
+    index: false,
+    follow: false,
+  },
 }
 
 export default function RootLayout({

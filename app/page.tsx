@@ -79,10 +79,11 @@ export default function MissionControl() {
   const systems: SystemStatus[] = [
     { name: 'EyeZen', status: 'online', icon: Server, metrics: [{ label: 'Status', value: 'Running' }, { label: 'Port', value: '3000' }] },
     { name: 'EyeZen Prod', status: 'online', icon: Server, metrics: [{ label: 'Status', value: 'Deployed' }, { label: 'URL', value: 'Vercel' }] },
-    { name: 'amtoc01bot', status: 'online', icon: Brain, metrics: [{ label: 'Model', value: 'zai/glm-5' }, { label: 'Status', value: 'Active' }] },
+    { name: 'amtoc01bot', status: 'online', icon: Brain, metrics: [{ label: 'Model', value: 'zai/glm-5' }, { label: 'Role', value: 'Executor' }] },
+    { name: 'amtoc02bot', status: 'online', icon: Brain, metrics: [{ label: 'Model', value: 'zai/glm-5' }, { label: 'Role', value: 'Orchestrator' }] },
     { name: 'Ollama', status: ollamaStats.status, icon: Box, metrics: [{ label: 'Model', value: ollamaStats.activeModel }, { label: 'VRAM', value: ollamaStats.vramUsage }] },
-    { name: 'GitHub', status: 'online', icon: Server, metrics: [{ label: 'Repos', value: '2 active' }, { label: 'Org', value: 'QuietSentinelShadow' }] },
-    { name: 'Cron Jobs', status: 'online', icon: Clock, metrics: [{ label: 'Active', value: '4 jobs' }, { label: 'Next', value: '7:00 AM' }] },
+    { name: 'GitHub', status: 'online', icon: Server, metrics: [{ label: 'Repos', value: '68 tracked' }, { label: 'Orgs', value: '3 active' }] },
+    { name: 'Cron Jobs', status: 'online', icon: Clock, metrics: [{ label: 'Active', value: '3 jobs' }, { label: 'Next', value: '07:00' }] },
   ];
 
   // Set mounted and initial time
