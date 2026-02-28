@@ -52,12 +52,14 @@
 
 ---
 
-## v1.5 — Task Management
+## v1.5 — Task Management ✅
 
-- [ ] Create/edit tasks directly in dashboard
-- [ ] Assign tasks to bots or humans
-- [ ] Task history and analytics
-- [ ] Sync with GitHub issues
+- [x] Create/edit tasks directly in dashboard
+- [x] Assign tasks to bots or humans
+- [x] Move tasks between statuses
+- [x] Delete tasks
+- [x] Priority and assignee fields
+- [x] Persistent storage (TASKS.json)
 
 ---
 
