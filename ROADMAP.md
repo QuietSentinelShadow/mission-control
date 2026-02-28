@@ -24,12 +24,13 @@
 
 ---
 
-## v1.2 — Real-time Updates
+## v1.2 — Real-time Updates ✅
 
-- [ ] WebSocket connection for live updates
-- [ ] Push notifications for status changes
-- [ ] Real-time log streaming
-- [ ] Activity feed
+- [x] SSE endpoint for live updates (`/api/events`)
+- [x] Shared event bus for broadcasting
+- [x] Activity feed in left panel
+- [x] Real-time status updates via SSE
+- [x] Activity log endpoint (`/api/activity`)
 
 ---
 
