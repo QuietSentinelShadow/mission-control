@@ -14,12 +14,13 @@
 
 ---
 
-## v1.1 — Status API
+## v1.1 — Status API ✅
 
-- [ ] `/api/status` endpoint for bots to POST their status
-- [ ] Store status in memory (or lightweight DB)
-- [ ] Live status updates in dashboard
-- [ ] Heartbeat tracking (last seen timestamp)
+- [x] `/api/status` endpoint for bots to POST their status
+- [x] Store status in memory
+- [x] Live status updates in dashboard
+- [x] Heartbeat tracking (last seen timestamp)
+- [x] Cron job for amtoc02bot heartbeats every 2 minutes
 
 ---
 
