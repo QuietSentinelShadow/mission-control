@@ -45,6 +45,18 @@ interface BotStatus {
   isStale?: boolean
 }
 
+interface Task {
+  id: string
+  title: string
+  description?: string
+  status: 'backlog' | 'in-progress' | 'done'
+  assignee?: string
+  priority: 'low' | 'medium' | 'high'
+  createdAt: string
+  updatedAt: string
+  tags?: string[]
+}
+
 export default function MissionControl() {
   const [currentTime, setCurrentTime] = useState<Date | null>(null);
   const [mounted, setMounted] = useState(false);
@@ -97,7 +109,17 @@ export default function MissionControl() {
 
   // Tasks state
   const [tasks, setTasks] = useState<any>(null);
+  const [fullTasks, setFullTasks] = useState<Task[]>([]);
   const [tasksLoading, setTasksLoading] = useState(false);
+  const [showTaskModal, setShowTaskModal] = useState(false);
+  const [editingTask, setEditingTask] = useState<Task | null>(null);
+  const [taskForm, setTaskForm] = useState({
+    title: '',
+    description: '',
+    status: 'backlog' as 'backlog' | 'in-progress' | 'done',
+    assignee: '',
+    priority: 'medium' as 'low' | 'medium' | 'high',
+  });
 
   // Systems to monitor (dynamic based on bot status)
   const getBotStatus = (name: string): 'online' | 'offline' => {
@@ -238,6 +260,7 @@ export default function MissionControl() {
         const res = await fetch('/api/tasks');
         const data = await res.json();
         setTasks(data);
+        setFullTasks(data.full || []);
       } catch (e) {
         console.error('Failed to fetch tasks');
       } finally {
@@ -247,6 +270,64 @@ export default function MissionControl() {
 
     fetchTasks();
   }, []);
+
+  // Task CRUD functions
+  const createTask = async () => {
+    if (!taskForm.title.trim()) return;
+    
+    try {
+      const res = await fetch('/api/tasks-v2', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(taskForm),
+      });
+      
+      if (res.ok) {
+        const data = await res.json();
+        setFullTasks([...fullTasks, data.task]);
+        setTaskForm({ title: '', description: '', status: 'backlog', assignee: '', priority: 'medium' });
+        setShowTaskModal(false);
+        // Refresh grouped tasks
+        const grouped = {
+          backlog: fullTasks.filter(t => t.status === 'backlog').map(t => t.title),
+          inProgress: fullTasks.filter(t => t.status === 'in-progress').map(t => t.title),
+          done: fullTasks.filter(t => t.status === 'done').map(t => t.title),
+        };
+        setTasks(grouped);
+      }
+    } catch (e) {
+      console.error('Failed to create task');
+    }
+  };
+
+  const updateTaskStatus = async (taskId: string, newStatus: 'backlog' | 'in-progress' | 'done') => {
+    try {
+      const res = await fetch('/api/tasks-v2', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: taskId, status: newStatus }),
+      });
+      
+      if (res.ok) {
+        const updated = fullTasks.map(t => t.id === taskId ? { ...t, status: newStatus } : t);
+        setFullTasks(updated);
+      }
+    } catch (e) {
+      console.error('Failed to update task');
+    }
+  };
+
+  const deleteTask = async (taskId: string) => {
+    try {
+      const res = await fetch(`/api/tasks-v2?id=${taskId}`, { method: 'DELETE' });
+      
+      if (res.ok) {
+        setFullTasks(fullTasks.filter(t => t.id !== taskId));
+      }
+    } catch (e) {
+      console.error('Failed to delete task');
+    }
+  };
 
 
   // Fetch logs
@@ -498,18 +579,56 @@ export default function MissionControl() {
             )}
 
             {activeLeftTab === 'tasks' && (
-              <div className="p-4">
-                <div className="text-sm text-gray-400 mb-4">Project Tasks</div>
+              <div className="p-3">
+                <div className="flex justify-between items-center mb-3">
+                  <div className="text-sm text-gray-400">Tasks</div>
+                  <button 
+                    onClick={() => { setEditingTask(null); setTaskForm({ title: '', description: '', status: 'backlog', assignee: '', priority: 'medium' }); setShowTaskModal(true); }}
+                    className="p-1.5 bg-purple-600 hover:bg-purple-700 rounded text-xs"
+                  >
+                    <Plus size={14} />
+                  </button>
+                </div>
+                
                 {tasksLoading ? (
                   <div className="text-gray-500 text-center py-8">Loading...</div>
-                ) : tasks ? (
-                  <div className="space-y-4">
-                    {renderKanbanColumn('Backlog', tasks.backlog || [], 'bg-gray-700')}
-                    {renderKanbanColumn('In Progress', tasks.inProgress || [], 'bg-blue-600')}
-                    {renderKanbanColumn('Done', tasks.done || [], 'bg-green-600')}
-                  </div>
+                ) : fullTasks.length === 0 ? (
+                  <div className="text-gray-500 text-center py-8">No tasks yet. Click + to create one.</div>
                 ) : (
-                  <div className="text-gray-500 text-center py-8">No tasks loaded</div>
+                  <div className="space-y-3">
+                    {['backlog', 'in-progress', 'done'].map(status => {
+                      const statusTasks = fullTasks.filter(t => t.status === status);
+                      const statusColors = { backlog: 'gray-700', 'in-progress': 'blue-600', done: 'green-600' };
+                      const statusLabels = { backlog: 'Backlog', 'in-progress': 'In Progress', done: 'Done' };
+                      
+                      return statusTasks.length > 0 && (
+                        <div key={status}>
+                          <div className="text-xs text-gray-400 mb-1">{statusLabels[status as keyof typeof statusLabels]} ({statusTasks.length})</div>
+                          <div className="space-y-1">
+                            {statusTasks.map(task => (
+                              <div key={task.id} className={`bg-${statusColors[status as keyof typeof statusColors]} rounded p-2 group`}>
+                                <div className="flex justify-between items-start">
+                                  <span className="text-xs text-white">{task.title}</span>
+                                  <div className="flex gap-1 opacity-0 group-hover:opacity-100">
+                                    {status !== 'in-progress' && (
+                                      <button onClick={() => updateTaskStatus(task.id, 'in-progress')} className="p-0.5 hover:bg-blue-500 rounded text-xs">→</button>
+                                    )}
+                                    {status !== 'done' && (
+                                      <button onClick={() => updateTaskStatus(task.id, 'done')} className="p-0.5 hover:bg-green-500 rounded text-xs">✓</button>
+                                    )}
+                                    <button onClick={() => deleteTask(task.id)} className="p-0.5 hover:bg-red-500 rounded text-xs"><Trash2 size={10} /></button>
+                                  </div>
+                                </div>
+                                {task.assignee && (
+                                  <span className="text-xs text-gray-300 mt-1 block">@{task.assignee}</span>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
                 )}
               </div>
             )}
@@ -541,6 +660,68 @@ export default function MissionControl() {
                 </div>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* TASK MODAL */}
+      {showTaskModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setShowTaskModal(false)}>
+          <div className="bg-gray-800 rounded-lg p-4 w-80 border border-gray-700" onClick={e => e.stopPropagation()}>
+            <div className="flex justify-between items-center mb-3">
+              <span className="text-sm font-bold">{editingTask ? 'Edit Task' : 'New Task'}</span>
+              <button onClick={() => setShowTaskModal(false)} className="text-gray-400 hover:text-white">✕</button>
+            </div>
+            
+            <div className="space-y-3">
+              <input
+                value={taskForm.title}
+                onChange={e => setTaskForm({ ...taskForm, title: e.target.value })}
+                placeholder="Task title..."
+                className="w-full px-2 py-1.5 bg-gray-900 rounded text-xs border border-gray-700"
+              />
+              
+              <textarea
+                value={taskForm.description}
+                onChange={e => setTaskForm({ ...taskForm, description: e.target.value })}
+                placeholder="Description (optional)..."
+                className="w-full px-2 py-1.5 bg-gray-900 rounded text-xs border border-gray-700 h-16"
+              />
+              
+              <select
+                value={taskForm.status}
+                onChange={e => setTaskForm({ ...taskForm, status: e.target.value as any })}
+                className="w-full px-2 py-1.5 bg-gray-900 rounded text-xs border border-gray-700"
+              >
+                <option value="backlog">Backlog</option>
+                <option value="in-progress">In Progress</option>
+                <option value="done">Done</option>
+              </select>
+              
+              <input
+                value={taskForm.assignee}
+                onChange={e => setTaskForm({ ...taskForm, assignee: e.target.value })}
+                placeholder="Assignee (optional)..."
+                className="w-full px-2 py-1.5 bg-gray-900 rounded text-xs border border-gray-700"
+              />
+              
+              <select
+                value={taskForm.priority}
+                onChange={e => setTaskForm({ ...taskForm, priority: e.target.value as any })}
+                className="w-full px-2 py-1.5 bg-gray-900 rounded text-xs border border-gray-700"
+              >
+                <option value="low">Low Priority</option>
+                <option value="medium">Medium Priority</option>
+                <option value="high">High Priority</option>
+              </select>
+              
+              <button
+                onClick={createTask}
+                className="w-full py-2 bg-purple-600 hover:bg-purple-700 rounded text-xs font-bold"
+              >
+                {editingTask ? 'Update Task' : 'Create Task'}
+              </button>
+            </div>
           </div>
         </div>
       )}
