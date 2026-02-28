@@ -1,9 +1,7 @@
 import { NextResponse } from 'next/server'
+import { subscribe } from '@/lib/events'
 
 export const runtime = 'edge'
-
-// Simple in-memory event store (resets on deploy, fine for now)
-const eventChannels: Map<string, ReadableStreamDefaultController> = new Map()
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url)
@@ -11,11 +9,19 @@ export async function GET(request: Request) {
   
   const stream = new ReadableStream({
     start(controller) {
-      eventChannels.set(channel, controller)
+      const encoder = new TextEncoder()
       
       // Send initial connection message
-      const encoder = new TextEncoder()
       controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'connected', channel })}\n\n`))
+      
+      // Subscribe to events
+      const unsubscribe = subscribe(channel, (event) => {
+        try {
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`))
+        } catch {
+          unsubscribe()
+        }
+      })
       
       // Keep-alive every 15 seconds
       const keepAlive = setInterval(() => {
@@ -23,14 +29,14 @@ export async function GET(request: Request) {
           controller.enqueue(encoder.encode(': keepalive\n\n'))
         } catch {
           clearInterval(keepAlive)
-          eventChannels.delete(channel)
+          unsubscribe()
         }
       }, 15000)
       
       // Cleanup on disconnect
       request.signal.addEventListener('abort', () => {
         clearInterval(keepAlive)
-        eventChannels.delete(channel)
+        unsubscribe()
       })
     },
   })
@@ -42,13 +48,4 @@ export async function GET(request: Request) {
       'Connection': 'keep-alive',
     },
   })
-}
-
-// Export for other routes to broadcast
-export function broadcast(channel: string, event: { type: string; data: any }) {
-  const controller = eventChannels.get(channel)
-  if (controller) {
-    const encoder = new TextEncoder()
-    controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`))
-  }
 }
