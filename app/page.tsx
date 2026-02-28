@@ -34,6 +34,17 @@ interface SystemStatus {
   metrics: { label: string; value: string }[];
 }
 
+interface BotStatus {
+  name: string
+  role: string
+  model: string
+  status: 'online' | 'offline' | 'busy'
+  lastSeen: string
+  currentTask?: string
+  metrics?: Record<string, string | number>
+  isStale?: boolean
+}
+
 export default function MissionControl() {
   const [currentTime, setCurrentTime] = useState<Date | null>(null);
   const [mounted, setMounted] = useState(false);
@@ -41,6 +52,9 @@ export default function MissionControl() {
   const [activeLeftTab, setActiveLeftTab] = useState<'settings' | 'notes' | 'logs' | 'tasks'>('logs');
   const [showLogPanel, setShowLogPanel] = useState(true);
   const [refreshInterval, setRefreshInterval] = useState(30);
+  
+  // Bot status state
+  const [botStatuses, setBotStatuses] = useState<BotStatus[]>([]);
   
   // Ollama state
   const [ollamaModels, setOllamaModels] = useState<OllamaModel[]>([]);
@@ -75,12 +89,28 @@ export default function MissionControl() {
   const [tasks, setTasks] = useState<any>(null);
   const [tasksLoading, setTasksLoading] = useState(false);
 
-  // Systems to monitor
+  // Systems to monitor (dynamic based on bot status)
+  const getBotStatus = (name: string): 'online' | 'offline' => {
+    const bot = botStatuses.find(b => b.name === name)
+    if (!bot) return 'online'
+    return bot.isStale ? 'offline' : bot.status
+  }
+  
+  const getBotMetric = (name: string, key: string): string => {
+    const bot = botStatuses.find(b => b.name === name)
+    if (!bot) return '—'
+    if (key === 'model') return bot.model
+    if (key === 'role') return bot.role
+    if (key === 'task') return bot.currentTask || 'Idle'
+    if (bot.metrics && bot.metrics[key]) return String(bot.metrics[key])
+    return '—'
+  }
+
   const systems: SystemStatus[] = [
     { name: 'EyeZen', status: 'online', icon: Server, metrics: [{ label: 'Status', value: 'Running' }, { label: 'Port', value: '3000' }] },
     { name: 'EyeZen Prod', status: 'online', icon: Server, metrics: [{ label: 'Status', value: 'Deployed' }, { label: 'URL', value: 'Vercel' }] },
-    { name: 'amtoc01bot', status: 'online', icon: Brain, metrics: [{ label: 'Model', value: 'zai/glm-5' }, { label: 'Role', value: 'Executor' }] },
-    { name: 'amtoc02bot', status: 'online', icon: Brain, metrics: [{ label: 'Model', value: 'zai/glm-5' }, { label: 'Role', value: 'Orchestrator' }] },
+    { name: 'amtoc01bot', status: getBotStatus('amtoc01bot'), icon: Brain, metrics: [{ label: 'Model', value: getBotMetric('amtoc01bot', 'model') }, { label: 'Role', value: getBotMetric('amtoc01bot', 'role') }] },
+    { name: 'amtoc02bot', status: getBotStatus('amtoc02bot'), icon: Brain, metrics: [{ label: 'Model', value: getBotMetric('amtoc02bot', 'model') }, { label: 'Role', value: getBotMetric('amtoc02bot', 'role') }] },
     { name: 'Ollama', status: ollamaStats.status, icon: Box, metrics: [{ label: 'Model', value: ollamaStats.activeModel }, { label: 'VRAM', value: ollamaStats.vramUsage }] },
     { name: 'GitHub', status: 'online', icon: Server, metrics: [{ label: 'Repos', value: '68 tracked' }, { label: 'Orgs', value: '3 active' }] },
     { name: 'Cron Jobs', status: 'online', icon: Clock, metrics: [{ label: 'Active', value: '3 jobs' }, { label: 'Next', value: '07:00' }] },
@@ -97,6 +127,22 @@ export default function MissionControl() {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
     return () => clearInterval(timer);
   }, []);
+
+  // Fetch bot statuses
+  useEffect(() => {
+    const fetchBotStatuses = async () => {
+      try {
+        const res = await fetch('/api/status');
+        const data = await res.json();
+        setBotStatuses(data.bots || []);
+      } catch (e) {
+        console.error('Failed to fetch bot statuses');
+      }
+    };
+    fetchBotStatuses();
+    const interval = setInterval(fetchBotStatuses, refreshInterval * 1000);
+    return () => clearInterval(interval);
+  }, [refreshInterval]);
 
   // Fetch Ollama stats
   useEffect(() => {
