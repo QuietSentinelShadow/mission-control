@@ -11,6 +11,18 @@ const botStatuses: Map<string, {
   metrics?: Record<string, string | number>
 }> = new Map()
 
+// Event subscribers (for real-time updates)
+const subscribers: Set<(event: any) => void> = new Set()
+
+export function subscribe(callback: (event: any) => void) {
+  subscribers.add(callback)
+  return () => subscribers.delete(callback)
+}
+
+function broadcast(event: { type: string; data: any }) {
+  subscribers.forEach(cb => cb(event))
+}
+
 // Initialize with known bots
 botStatuses.set('amtoc01bot', {
   name: 'amtoc01bot',
@@ -52,6 +64,7 @@ export async function POST(request: Request) {
     }
     
     const existing = botStatuses.get(name)
+    const previousStatus = existing?.status
     
     botStatuses.set(name, {
       name,
@@ -63,9 +76,23 @@ export async function POST(request: Request) {
       metrics: metrics,
     })
     
+    const updatedBot = botStatuses.get(name)
+    
+    // Broadcast status change
+    if (previousStatus !== updatedBot?.status || currentTask !== existing?.currentTask) {
+      broadcast({
+        type: 'status_update',
+        data: {
+          bot: { ...updatedBot, isStale: false },
+          previousStatus,
+          timestamp: new Date().toISOString(),
+        }
+      })
+    }
+    
     return NextResponse.json({ 
       success: true, 
-      bot: botStatuses.get(name) 
+      bot: updatedBot 
     })
   } catch (error) {
     return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })

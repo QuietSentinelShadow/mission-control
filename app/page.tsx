@@ -49,12 +49,22 @@ export default function MissionControl() {
   const [currentTime, setCurrentTime] = useState<Date | null>(null);
   const [mounted, setMounted] = useState(false);
   const [showLeftPanel, setShowLeftPanel] = useState(true);
-  const [activeLeftTab, setActiveLeftTab] = useState<'settings' | 'notes' | 'logs' | 'tasks'>('logs');
+  const [activeLeftTab, setActiveLeftTab] = useState<'settings' | 'notes' | 'logs' | 'tasks' | 'activity'>('activity');
   const [showLogPanel, setShowLogPanel] = useState(true);
   const [refreshInterval, setRefreshInterval] = useState(30);
   
   // Bot status state
   const [botStatuses, setBotStatuses] = useState<BotStatus[]>([]);
+  
+  // Activity feed state
+  const [activities, setActivities] = useState<Array<{
+    id: string
+    type: string
+    timestamp: string
+    title: string
+    description?: string
+    source?: string
+  }>>([]);
   
   // Ollama state
   const [ollamaModels, setOllamaModels] = useState<OllamaModel[]>([]);
@@ -144,6 +154,63 @@ export default function MissionControl() {
     const interval = setInterval(fetchBotStatuses, refreshInterval * 1000);
     return () => clearInterval(interval);
   }, [refreshInterval]);
+
+  // SSE connection for real-time updates
+  useEffect(() => {
+    const eventSource = new EventSource('/api/events?channel=mission-control');
+    
+    eventSource.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        
+        if (data.type === 'status_update') {
+          // Update bot status in real-time
+          setBotStatuses(prev => {
+            const updated = prev.map(bot => 
+              bot.name === data.data.bot.name ? data.data.bot : bot
+            );
+            // Add new bot if not found
+            if (!updated.find(b => b.name === data.data.bot.name)) {
+              updated.push(data.data.bot);
+            }
+            return updated;
+          });
+          
+          // Add to activity feed
+          setActivities(prev => [{
+            id: `rt_${Date.now()}`,
+            type: 'status_change',
+            timestamp: data.data.timestamp,
+            title: `${data.data.bot.name}: ${data.data.bot.status}`,
+            description: data.data.bot.currentTask || 'Status updated',
+            source: data.data.bot.name,
+          }, ...prev].slice(0, 50));
+        }
+      } catch (e) {
+        console.error('Failed to parse SSE event');
+      }
+    };
+    
+    eventSource.onerror = () => {
+      console.error('SSE connection error');
+    };
+    
+    return () => eventSource.close();
+  }, []);
+
+  // Fetch activity log
+  useEffect(() => {
+    const fetchActivities = async () => {
+      try {
+        const res = await fetch('/api/activity');
+        const data = await res.json();
+        setActivities(data.activities || []);
+      } catch (e) {
+        console.error('Failed to fetch activities');
+      }
+    };
+    fetchActivities();
+  }, []);
 
   // Fetch Ollama stats
   useEffect(() => {
@@ -277,6 +344,9 @@ export default function MissionControl() {
             </button>
             <button onClick={() => setActiveLeftTab('tasks')} className={`flex-1 p-3 flex items-center justify-center gap-2 ${activeLeftTab === 'tasks' ? 'bg-purple-600' : 'text-gray-400'}`}>
               <CheckSquare size={18} /> <span className="text-sm">Tasks</span>
+            </button>
+            <button onClick={() => setActiveLeftTab('activity')} className={`flex-1 p-3 flex items-center justify-center gap-2 ${activeLeftTab === 'activity' ? 'bg-green-600' : 'text-gray-400'}`}>
+              <Activity size={18} /> <span className="text-sm">Feed</span>
             </button>
           </div>
 
@@ -441,6 +511,34 @@ export default function MissionControl() {
                 ) : (
                   <div className="text-gray-500 text-center py-8">No tasks loaded</div>
                 )}
+              </div>
+            )}
+
+            {activeLeftTab === 'activity' && (
+              <div className="p-3">
+                <div className="text-sm text-gray-400 mb-3">Activity Feed</div>
+                <div className="space-y-2">
+                  {activities.length === 0 ? (
+                    <div className="text-gray-500 text-center py-8">No activity yet</div>
+                  ) : (
+                    activities.map((activity) => (
+                      <div key={activity.id} className="bg-gray-900 rounded p-2 border-l-2 border-green-500">
+                        <div className="flex justify-between items-start">
+                          <span className="text-xs font-medium text-white">{activity.title}</span>
+                          <span className="text-xs text-gray-500">
+                            {new Date(activity.timestamp).toLocaleTimeString()}
+                          </span>
+                        </div>
+                        {activity.description && (
+                          <p className="text-xs text-gray-400 mt-1">{activity.description}</p>
+                        )}
+                        {activity.source && (
+                          <span className="text-xs text-gray-500 mt-1 block">via {activity.source}</span>
+                        )}
+                      </div>
+                    ))
+                  )}
+                </div>
               </div>
             )}
           </div>
